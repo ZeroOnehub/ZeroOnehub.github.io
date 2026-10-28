@@ -28,6 +28,8 @@
     mail: '<rect x="3" y="5" width="18" height="14" rx="2"/><path d="m3 7 9 6 9-6"/>',
     flag: '<path d="M5 21V4h11l-2 4 2 4H5"/>',
     check: '<path d="m5 12 5 5 9-10"/>',
+    route: '<circle cx="6" cy="19" r="2.5"/><circle cx="18" cy="5" r="2.5"/><path d="M8.5 19H15a3.5 3.5 0 0 0 0-7H9a3.5 3.5 0 0 1 0-7h6.5"/>',
+    brief: '<rect x="3" y="7" width="18" height="13" rx="2"/><path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18"/>',
   };
   const icon = (n, s = 14) =>
     `<svg viewBox="0 0 24 24" width="${s}" height="${s}" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${ICONS[n]}</svg>`;
@@ -59,10 +61,12 @@
   $("params").innerHTML = params.map(([k, v]) => `<div><dt>${k}</dt><dd>${v}</dd></div>`).join("");
 
   /* ---------- 首屏：输出节点 ---------- */
+  const M = S.method || {};
+  const featured = projects.find((p) => p.featured);
   const outs = [];
-  if (has(projects)) outs.push({ href: "#projects", ico: "layers", type: "输出 · 项目", title: "查看项目", sub: `${projects.length} 个项目节点` });
+  if (has(projects)) outs.push({ href: "#projects", ico: "layers", type: "输出 · 作品", title: featured ? featured.name : "查看项目", sub: `${featured ? "主项目 · " : ""}共 ${projects.length} 个作品` });
+  if (has(M.forms)) outs.push({ href: "#method", ico: "route", type: "输出 · 方法", title: "AI 形态怎么选", sub: `${M.forms.length} 种场景 · 做事流程 · 底线` });
   if (has(C.email) || has(C.phone)) outs.push({ href: "#contact", ico: "mail", type: "输出 · 联系", title: "联系我", sub: C.email || C.phone });
-  if (has(C.github)) outs.push({ href: C.github, ico: "git", type: "输出 · 外链", title: "GitHub", sub: host(C.github) });
   $("outputs").innerHTML = outs
     .map((o, i) => `<a class="node out-node" href="${esc(o.href)}"${ext(o.href)}>
         <span class="port in" data-port="o-in-${i}"></span>
@@ -75,46 +79,100 @@
   const stages = [];
 
   if (has(S.pillars)) {
-    const body = '<div class="chain">' + S.pillars.map((p, i) =>
+    const body = `<div class="chain${S.pillars.length === 4 ? " n4" : ""}">` + S.pillars.map((p, i) =>
       (i ? '<div class="chain-link" aria-hidden="true"></div>' : "") +
       `<div class="sub"><div class="sub-head"><span>step_${pad(i + 1)}</span>${has(p.verb) ? `<span class="sub-verb">${esc(p.verb)}</span>` : ""}</div>
-        <h3>${esc(p.title)}</h3>${has(p.text) ? `<p>${esc(p.text)}</p>` : ""}</div>`).join("") + "</div>";
+        <h3>${esc(p.title)}</h3>${has(p.text) ? `<p>${esc(p.text)}</p>` : ""}
+        ${has(p.proof) ? `<p class="sub-proof">${icon("check", 12)}<span>${esc(p.proof)}</span></p>` : ""}</div>`).join("") + "</div>";
     stages.push({ id: "pillars", nav: "能力", title: "能力", type: "Chain", icon: "cpu", count: `${S.pillars.length} 个子节点`, body, log: `串联 ${S.pillars.length} 个能力子节点` });
   }
 
-  if (has(S.about)) {
-    stages.push({ id: "about", nav: "关于", title: "关于我", type: "Note", icon: "note", body: `<div class="about">${S.about.map((t) => `<p>${esc(t)}</p>`).join("")}</div>`, log: "读取个人简介" });
-  }
-
-  const projectCard = (p) => {
-    const l = p.links || {};
-    const main = l.github || l.demo || l.doc || "";
-    const wip = /进行中/.test(p.status || "");
-    const links = [];
-    if (has(l.github)) links.push(`<a href="${esc(l.github)}"${ext(l.github)}>GitHub ↗</a>`);
-    if (has(l.demo)) links.push(`<a href="${esc(l.demo)}"${ext(l.demo)}>Demo ↗</a>`);
-    if (has(l.doc)) links.push(`<a href="${esc(l.doc)}"${ext(l.doc)}>文档 ↗</a>`);
-    return `<article class="pnode" data-cat="${esc(p.category || "")}">
+  /* 项目：主项目用大卡片展开四段讲解，其余卡片点“展开讲解”就地展开 */
+  const story = (p) => {
+    const parts = [["01", "问题", p.problem], ["02", "我的判断", p.judgment], ["03", "怎么做", p.approach]].filter((x) => has(x[2]));
+    const hl = has(p.highlights)
+      ? `<div class="st st-hl"><div class="st-h"><span>04</span>亮点</div><ul>${p.highlights.map((h) => `<li>${esc(h)}</li>`).join("")}</ul></div>`
+      : "";
+    return parts.length || hl ? `<div class="story">${parts.map(([n, t, v]) => `<div class="st"><div class="st-h"><span>${n}</span>${t}</div><p>${esc(v)}</p></div>`).join("")}${hl}</div>` : "";
+  };
+  const pmeta = (p) => [has(p.kind) ? `<span class="pk">${esc(p.kind)}</span>` : "", has(p.role) ? `<span class="pr">${esc(p.role)}</span>` : ""].join("");
+  const tagList = (p) => (has(p.tags) ? `<ul class="tags">${p.tags.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : "");
+  const featuredCard = (p) => `<article class="pnode pfeat" data-cat="${esc(p.group || "")}">
       <span class="port in"></span><span class="port out"></span>
-      <div class="pnode-head"><span class="pcat">${esc(p.category || "Project")}</span>${has(p.status) ? `<span class="pstatus${wip ? " wip" : ""}">${esc(p.status)}</span>` : ""}</div>
-      ${has(p.cover) ? `<div class="pcover"><img src="${esc(p.cover)}" alt="${esc(p.name)} 演示" loading="lazy"></div>` : ""}
-      <div class="pnode-body">
-        <h3>${main ? `<a href="${esc(main)}"${ext(main)}>${esc(p.name)}</a>` : esc(p.name)}</h3>
-        <p>${esc(p.oneLiner || "")}</p>
-        ${has(p.tags) ? `<ul class="tags">${p.tags.map((t) => `<li>${esc(t)}</li>`).join("")}</ul>` : ""}
+      <div class="pnode-head"><span class="pcat">${esc(p.category || "Project")}</span><span class="pflag">${icon("flag", 12)}主项目</span></div>
+      <div class="pfeat-body">
+        <div class="pfeat-top">
+          <div><h3>${esc(p.name)}</h3>${has(p.alias) ? `<p class="palias">${esc(p.alias)}</p>` : ""}</div>
+          <div class="pmeta">${pmeta(p)}</div>
+        </div>
+        <p class="pone">${esc(p.oneLiner || "")}</p>
+        ${story(p)}
+        ${tagList(p)}
       </div>
-      ${links.length || has(p.date) ? `<div class="pnode-foot">${links.join("")}${has(p.date) ? `<span class="pdate">${esc(p.date)}</span>` : ""}</div>` : ""}
+    </article>`;
+  const projectCard = (p) => {
+    const s = story(p);
+    return `<article class="pnode" data-cat="${esc(p.group || "")}">
+      <span class="port in"></span><span class="port out"></span>
+      <div class="pnode-head"><span class="pcat">${esc(p.category || "Project")}</span>${has(p.date) ? `<span class="pdate">${esc(p.date)}</span>` : ""}</div>
+      <div class="pnode-body">
+        <h3>${esc(p.name)}${has(p.alias) ? `<span class="palias-i">${esc(p.alias)}</span>` : ""}</h3>
+        <div class="pmeta">${pmeta(p)}</div>
+        <p>${esc(p.oneLiner || "")}</p>
+        ${tagList(p)}
+      </div>
+      ${s ? `<details class="pmore"><summary><span>展开讲解</span><small>问题 · 判断 · 做法 · 亮点</small></summary>${s}</details>` : ""}
     </article>`;
   };
+  const renderProjects = (group) => {
+    const list = projects.filter((p) => !group || p.group === group);
+    const feat = list.filter((p) => p.featured);
+    const rest = list.filter((p) => !p.featured);
+    return feat.map(featuredCard).join("") + (rest.length ? `<div class="pgrid two">${rest.map(projectCard).join("")}</div>` : "");
+  };
   if (has(projects)) {
-    const cats = [...new Set(projects.map((p) => p.category).filter(has))];
-    const filters = cats.length > 1
+    const groups = [...new Set(projects.map((p) => p.group).filter(has))];
+    const filters = groups.length > 1
       ? `<div class="filters" id="project-filters" role="tablist" aria-label="按方向筛选">
           <button class="filter" role="tab" aria-selected="true" data-cat="">全部 ${projects.length}</button>
-          ${cats.map((c) => `<button class="filter" role="tab" aria-selected="false" data-cat="${esc(c)}">${esc(c)}</button>`).join("")}
+          ${groups.map((g) => `<button class="filter" role="tab" aria-selected="false" data-cat="${esc(g)}">${esc(g)} ${projects.filter((p) => p.group === g).length}</button>`).join("")}
         </div>`
       : "";
-    stages.push({ id: "projects", nav: "项目", title: "项目", type: "Group", icon: "layers", count: `${projects.length} 个节点`, body: filters + `<div class="pgrid" id="project-list">${projects.map(projectCard).join("")}</div>`, log: `加载 ${projects.length} 个项目节点` });
+    stages.push({ id: "projects", nav: "项目", title: "项目", type: "Group", icon: "layers", count: `${projects.length} 个作品`, body: filters + `<div class="plist" id="project-list">${renderProjects("")}</div>`, log: `加载 ${projects.length} 个作品节点` });
+  }
+
+  /* 方法：AI 形态怎么选 · 做事流程 · 底线 */
+  if (has(M.forms) || has(M.flow) || has(M.principles)) {
+    let body = "";
+    if (has(M.forms)) {
+      body += `<div class="m-block"><h3 class="m-title"><code>router</code>AI 形态怎么选</h3><div class="routes">${M.forms.map((f) =>
+        `<div class="route"><div class="r-when"><span class="r-if">if</span><span>${esc(f.when)}</span></div><div class="r-arrow" aria-hidden="true">→</div>
+          <div class="r-use"><b>${esc(f.use)}</b><span>${esc(f.why)}</span></div>${has(f.example) ? `<div class="r-eg"><span>例</span>${esc(f.example)}</div>` : ""}</div>`).join("")}</div></div>`;
+    }
+    if (has(M.flow)) {
+      body += `<div class="m-block"><h3 class="m-title"><code>pipeline</code>我做 AI 产品的流程</h3><ol class="steps">${M.flow.map((s, i) =>
+        `<li><span class="s-n">${pad(i + 1)}</span><b>${esc(s.title)}</b><p>${esc(s.text)}</p></li>`).join("")}</ol></div>`;
+    }
+    if (has(M.principles)) {
+      body += `<div class="m-block"><h3 class="m-title"><code>guardrails</code>几条底线</h3><ul class="rules">${M.principles.map((t) =>
+        `<li>${icon("check", 13)}<span>${esc(t)}</span></li>`).join("")}</ul></div>`;
+    }
+    stages.push({ id: "method", nav: "方法", title: "方法", type: "Router", icon: "route", count: has(M.forms) ? `${M.forms.length} 条路由` : "", body, log: "按场景路由到合适的 AI 形态" });
+  }
+
+  /* 经历：自我介绍 + 时间线 */
+  const tl = (e, edu) => `<li class="tl${edu ? " edu" : ""}">
+      <div class="tl-period">${esc(e.period || "")}</div>
+      <div class="tl-main"><h3>${esc(e.org)}${has(e.role) ? `<span class="tl-role">${esc(e.role)}</span>` : ""}</h3>
+        ${has(e.text) ? `<p>${esc(e.text)}</p>` : ""}
+        ${has(e.points) ? `<ul>${e.points.map((x) => `<li>${esc(x)}</li>`).join("")}</ul>` : ""}</div>
+    </li>`;
+  if (has(S.about) || has(S.experience)) {
+    const about = has(S.about) ? `<div class="about">${S.about.map((t) => `<p>${esc(t)}</p>`).join("")}</div>` : "";
+    const line = has(S.experience) || has(S.education)
+      ? `<ol class="timeline">${(S.experience || []).map((e) => tl(e)).join("")}${(S.education || []).map((e) => tl(e, true)).join("")}</ol>` : "";
+    const n = (S.experience || []).length;
+    stages.push({ id: "experience", nav: "经历", title: "经历", type: "Timeline", icon: "brief", count: n ? `${n} 段经历` : "", body: about + line, log: "回放经历时间线" });
   }
 
   const row = (o) => {
@@ -200,8 +258,7 @@
       const b = e.target.closest(".filter");
       if (!b) return;
       filterEl.querySelectorAll(".filter").forEach((x) => x.setAttribute("aria-selected", String(x === b)));
-      const cat = b.dataset.cat;
-      $("project-list").innerHTML = projects.filter((p) => !cat || p.category === cat).map(projectCard).join("");
+      $("project-list").innerHTML = renderProjects(b.dataset.cat);
     });
   }
 
